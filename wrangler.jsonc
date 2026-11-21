@@ -1,0 +1,14 @@
+// VTech Auction Tracker — Cloudflare Worker + D1. Workers Builds deploys on every push to main.
+// Secret (dashboard, not committed): APIFY_TOKEN.
+{
+  "name": "vtech-auction-tracker",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "assets": { "directory": "./public", "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": ["/api/*"] },
+  "d1_databases": [{ "binding": "DB", "database_name": "vtech-auction-tracker", "database_id": "4aeb98f0-e2f4-4ab3-ad20-4b2cf46116e9" }],
+  "send_email": [{ "name": "MAILER" }],
+  "vars": { "ADMIN_EMAIL": "hansalgandhi@gmail.com", "MAIL_FROM": "tenders@vtech.services" },
+  "triggers": { "crons": ["0 2 * * *"] }, // 07:30 IST daily
+  "routes": [{ "pattern": "auction.vtech.services", "custom_domain": true }],
+  "observability": { "enabled": true }
+}

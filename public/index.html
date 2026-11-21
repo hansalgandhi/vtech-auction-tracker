@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>VTech Auction Tracker</title>
+<style>
+  :root { --ink:#14213d; --muted:#5b6472; --line:#e3e6eb; --bg:#f7f8fa; --accent:#1d4ed8; --ok:#15803d; --warn:#b45309; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color:var(--ink); background:var(--bg); }
+  header { display:flex; align-items:center; gap:16px; padding:12px 20px; background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:1; }
+  header h1 { font-size:16px; margin:0; letter-spacing:-.01em; }
+  header nav { display:flex; gap:4px; margin-left:8px; }
+  header nav button { background:none; border:0; padding:6px 10px; border-radius:6px; color:var(--muted); cursor:pointer; font:inherit; }
+  header nav button.on { background:var(--bg); color:var(--ink); font-weight:600; }
+  header .who { margin-left:auto; color:var(--muted); }
+  main { max-width:1200px; margin:0 auto; padding:20px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:16px; }
+  .bar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+  input, select, textarea { font:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:6px; background:#fff; color:inherit; }
+  textarea { width:100%; min-height:140px; }
+  button.primary { background:var(--accent); color:#fff; border:0; padding:8px 14px; border-radius:6px; font:inherit; font-weight:600; cursor:pointer; }
+  button.link { background:none; border:0; color:var(--accent); cursor:pointer; font:inherit; padding:0; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:9px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); font-weight:600; }
+  td.num { white-space:nowrap; }
+  .tag { display:inline-block; padding:1px 7px; border-radius:99px; font-size:12px; background:var(--bg); border:1px solid var(--line); }
+  .soon { color:var(--warn); font-weight:600; }
+  .muted { color:var(--muted); }
+  .err { color:#b91c1c; min-height:1.2em; }
+  .auth { max-width:360px; margin:12vh auto; }
+  .auth label { display:block; margin:10px 0 4px; font-weight:600; }
+  .auth input { width:100%; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:760px) { .grid { grid-template-columns:1fr; } header nav { display:none; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c]);
+async function api(path, opts = {}) {
+  const res = await fetch('/api/' + path, { headers: { 'content-type': 'application/json' }, ...opts, body: opts.body && JSON.stringify(opts.body) });
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && path !== 'login') { me = null; render(); }
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+let me = null, view = 'bids';
+const app = $('#app');
+
+function authForm(setup) {
+  app.innerHTML = `<div class="auth card"><h2>${setup ? 'Create admin account' : 'Sign in'}</h2>
+    <p class="muted">VTech Auction Tracker</p>
+    ${setup ? '<label>Name</label><input id="name" autocomplete="name">' : ''}
+    <label>Email</label><input id="email" type="email" autocomplete="username">
+    <label>Password</label><input id="password" type="password" autocomplete="${setup ? 'new-password' : 'current-password'}">
+    <p class="err" id="err"></p><button class="primary" id="go">${setup ? 'Create account' : 'Sign in'}</button></div>`;
+  $('#go').onclick = async () => {
+    try {
+      const b = { email: $('#email').value, password: $('#password').value, name: setup ? $('#name').value : undefined };
+      if (setup) await api('setup', { method: 'POST', body: b });
+      await api('login', { method: 'POST', body: b });
+      boot();
+    } catch (e) { $('#err').textContent = e.message; }
+  };
+}
+
+function shell(inner) {
+  const tabs = [['bids', 'Bids'], ['settings', 'Settings'], ...(me.role === 'admin' ? [['users', 'Users']] : [])];
+  app.innerHTML = `<header><h1>VTech Auction Tracker</h1><nav>${tabs.map(([k, l]) => `<button data-v="${k}" class="${view === k ? 'on' : ''}">${l}</button>`).join('')}</nav>
+    <span class="who">${esc(me.name)} · <button class="link" id="out">Sign out</button></span></header><main>${inner}</main>`;
+  app.querySelectorAll('nav button').forEach((b) => (b.onclick = () => { view = b.dataset.v; render(); }));
+  $('#out').onclick = async () => { await api('logout', { method: 'POST' }); me = null; render(); };
+}
+
+const daysLeft = (end) => end ? Math.ceil((new Date(end) - Date.now()) / 864e5) : null;
+
+async function bidsView() {
+  shell(`<div class="bar"><input id="q" placeholder="Search items, buyer, bid no." style="flex:1;min-width:220px">
+    <select id="interest"><option value="">All</option><option>new</option><option>interested</option><option>submitted</option><option>ignored</option></select>
+    <label class="muted"><input type="checkbox" id="open" checked> Open only</label></div><div class="card" id="list">Loading…</div>`);
+  const load = async () => {
+    const qs = new URLSearchParams({ q: $('#q').value, interest: $('#interest').value, open: $('#open').checked ? '1' : '0' });
+    const bids = await api('bids?' + qs);
+    $('#list').innerHTML = !bids.length ? '<p class="muted">No bids yet. The daily run fills this list; admins can trigger it from Settings.</p>' :
+      `<table><tr><th>Bid</th><th>Items</th><th>Buyer</th><th>Closes</th><th>Status</th></tr>${bids.map((b) => {
+        const d = daysLeft(b.end_at);
+        return `<tr><td class="num"><a href="${esc(b.url)}" target="_blank" rel="noopener">${esc(b.bid_number)}</a><br>
+          <span class="tag">${esc(b.bid_kind || 'bid')}</span> ${b.bid_to_ra ? '<span class="tag">Bid→RA</span>' : ''} ${b.is_high_value ? '<span class="tag">≥ ₹2 Cr</span>' : ''}</td>
+          <td>${esc(b.items)}<br><span class="muted">Qty ${esc(b.quantity ?? '—')} · keyword “${esc(b.matched_keyword)}”</span></td>
+          <td>${esc(b.ministry)}<br><span class="muted">${esc(b.department)}</span></td>
+          <td class="num ${d !== null && d <= 3 ? 'soon' : ''}">${esc((b.end_at || '').slice(0, 16).replace('T', ' '))}<br><span class="muted">${d === null ? '' : d < 0 ? 'closed' : d + ' day(s) left'}</span></td>
+          <td><select data-bid="${esc(b.bid_number)}">${['new', 'interested', 'submitted', 'ignored'].map((s) => `<option ${s === b.interest ? 'selected' : ''}>${s}</option>`).join('')}</select></td></tr>`;
+      }).join('')}</table>`;
+    $('#list').querySelectorAll('select[data-bid]').forEach((s) => (s.onchange = () =>
+      api('bids/' + encodeURIComponent(s.dataset.bid), { method: 'PATCH', body: { interest: s.value } })));
+  };
+  let t; $('#q').oninput = () => { clearTimeout(t); t = setTimeout(load, 250); };
+  $('#interest').onchange = load; $('#open').onchange = load;
+  load();
+}
+
+async function settingsView() {
+  const [s, runs] = await Promise.all([api('settings'), api('runs')]);
+  const admin = me.role === 'admin';
+  shell(`<div class="grid"><div class="card"><h3>Keywords <span class="muted">(max 10, one per line)</span></h3>
+      <textarea id="kw" ${admin ? '' : 'disabled'}>${esc(s.keywords.join('\n'))}</textarea>
+      <h3>Email recipients <span class="muted">(one per line)</span></h3>
+      <textarea id="rc" ${admin ? '' : 'disabled'}>${esc(s.recipients.join('\n'))}</textarea>
+      <p class="muted">Each recipient must be verified once in Cloudflare Email Routing → Destination addresses.</p>
+      ${admin ? '<button class="primary" id="save">Save</button> <button class="link" id="run">Run now</button>' : ''}<p class="err" id="err"></p></div>
+    <div class="card"><h3>Recent runs</h3>${s.apifyConfigured ? '' : '<p class="err">APIFY_TOKEN secret is not set — runs will fail until it is added.</p>'}
+      <table><tr><th>When (UTC)</th><th>Fetched</th><th>New</th><th>Emailed</th><th>Error</th></tr>
+      ${runs.map((r) => `<tr><td>${esc(r.at)}</td><td>${r.fetched}</td><td>${r.new_bids}</td><td>${r.emailed}</td><td class="err">${esc(r.error)}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">No runs yet</td></tr>'}</table></div></div>`);
+  if (!admin) return;
+  const lines = (id) => $(id).value.split('\n').map((x) => x.trim()).filter(Boolean);
+  $('#save').onclick = async () => { try { await api('settings', { method: 'PUT', body: { keywords: lines('#kw'), recipients: lines('#rc') } }); $('#err').textContent = 'Saved'; } catch (e) { $('#err').textContent = e.message; } };
+  $('#run').onclick = async () => { $('#err').textContent = 'Running… (can take a minute)'; try { const r = await api('run-now', { method: 'POST' }); $('#err').textContent = r.error || `Fetched ${r.fetched}, new ${r.fresh}, emailed ${r.emailed}`; } catch (e) { $('#err').textContent = e.message; } };
+}
+
+async function usersView() {
+  const users = await api('users');
+  shell(`<div class="grid"><div class="card"><h3>Users</h3><table><tr><th>Name</th><th>Email</th><th>Role</th><th></th></tr>
+    ${users.map((u) => `<tr><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${u.role}</td>
+      <td>${u.id === me.id ? '' : `<button class="link" data-id="${u.id}" data-active="${u.active}">${u.active ? 'Disable' : 'Enable'}</button>`}</td></tr>`).join('')}</table></div>
+    <div class="card"><h3>Add user</h3><input id="n" placeholder="Name" style="width:100%"><br><br><input id="e" placeholder="Email" style="width:100%"><br><br>
+      <input id="p" placeholder="Temporary password (10+ chars)" style="width:100%"><br><br><select id="r"><option value="member">member</option><option value="admin">admin</option></select>
+      <button class="primary" id="add">Add</button><p class="err" id="err"></p></div></div>`);
+  $('#add').onclick = async () => { try { await api('users', { method: 'POST', body: { name: $('#n').value, email: $('#e').value, password: $('#p').value, role: $('#r').value } }); usersView(); } catch (e) { $('#err').textContent = e.message; } };
+  app.querySelectorAll('button[data-id]').forEach((b) => (b.onclick = async () => { await api('users/' + b.dataset.id, { method: 'PATCH', body: { active: b.dataset.active !== '1' } }); usersView(); }));
+}
+
+function render() {
+  if (!me) return boot();
+  ({ bids: bidsView, settings: settingsView, users: usersView })[view]();
+}
+async function boot() {
+  try { me = await api('me'); render(); }
+  catch { const { needsSetup } = await api('needs-setup'); authForm(needsSetup); }
+}
+boot();
+</script>
+</body>
+</html>
