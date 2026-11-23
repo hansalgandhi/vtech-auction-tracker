@@ -63,7 +63,7 @@ export async function runWatch(env: Env) {
     const results = !valid.length ? [] : await env.DB.batch(
       valid.map((b) =>
         stmt.bind(b.bidNumber, b.bidKind ?? null, b.items ?? null, b.quantity ?? null, b.ministry ?? null, b.department ?? null,
-          b.startAt ?? null, b.endAt ?? null, b.status ?? null, b.isHighValue ? 1 : 0, b.bidToRaEnabled ? 1 : 0, b.url ?? null, b.matchedKeyword ?? null)),
+          b.startAt ?? null, b.endAt ?? null, b.status ?? null, b.isHighValue ? 1 : 0, b.bidToRaEnabled ? 1 : 0, /^https:\/\//i.test(b.url ?? '') ? b.url : null, b.matchedKeyword ?? null)),
     );
     fresh = results.reduce((n, r) => n + (r.meta.changes ?? 0), 0);
     emailed = await notifyNew(env);
