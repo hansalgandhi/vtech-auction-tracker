@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>VTech Auction Tracker</title>
 <style>
-  :root { --ink:#14213d; --muted:#5b6472; --line:#e3e6eb; --bg:#f7f8fa; --accent:#1d4ed8; --ok:#15803d; --warn:#b45309; }
+  :root { --ink:#14213d; --muted:#5b6472; --line:#e3e6eb; --bg:#f7f8fa; --accent:#1d4ed8; --tint:#eef2fd; --ok:#15803d; --warn:#b45309; }
   * { box-sizing: border-box; }
   body { margin:0; font:14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color:var(--ink); background:var(--bg); }
   header { display:flex; align-items:center; gap:16px; padding:12px 20px; background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:1; }
   header h1 { font-size:16px; margin:0; letter-spacing:-.01em; }
   header nav { display:flex; gap:4px; margin-left:8px; }
   header nav button { background:none; border:0; padding:6px 10px; border-radius:6px; color:var(--muted); cursor:pointer; font:inherit; }
-  header nav button.on { background:var(--bg); color:var(--ink); font-weight:600; }
+  header nav button.on { color:var(--accent); font-weight:600; }
   header .who { margin-left:auto; color:var(--muted); }
   main { max-width:1200px; margin:0 auto; padding:20px; }
   .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:16px; }
@@ -34,22 +34,48 @@
   .auth input { width:100%; }
   .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
   @media (max-width:760px) { .grid { grid-template-columns:1fr; } header nav { display:none; } }
-  /* Motion on Pin UI's springs (pinui.xyz, lib/motion.ts), ported to CSS linear() easings. */
-  :root { --pin-spring:cubic-bezier(0.22,1,0.36,1); --pin-soft:cubic-bezier(0.25,1,0.5,1); }
+  /* Motion. Everything moves on a spring, written as CSS linear() curves sampled from the spring's own physics
+     (stiffness / damping / mass): quick 420/34/0.9, soft 260/30/1, weighty 240/22/1.1, exit 460/46/0.8, bouncy 600/18/0.6. */
+  :root { --spring:cubic-bezier(0.22,1,0.36,1); --soft:cubic-bezier(0.25,1,0.5,1); --weighty:cubic-bezier(0.34,1.3,0.64,1); --exit:cubic-bezier(0.4,0,1,1); --bouncy:cubic-bezier(0.34,1.56,0.64,1); }
   @supports (transition-timing-function: linear(0, 1)) { :root {
-    --pin-spring:linear(0, 0.091, 0.268, 0.46, 0.622, 0.752, 0.846, 0.909, 0.951, 0.976, 0.99, 0.998, 1.002, 1.003, 1.003, 1.003, 1);
-    --pin-soft:linear(0, 0.069, 0.211, 0.371, 0.518, 0.644, 0.745, 0.82, 0.877, 0.918, 0.946, 0.966, 0.979, 0.987, 0.993, 0.996, 1);
+    --spring:linear(0, 0.035, 0.117, 0.223, 0.337, 0.449, 0.552, 0.642, 0.72, 0.786, 0.839, 0.881, 0.915, 0.94, 0.96, 0.974, 0.985, 0.992, 0.997, 1, 1.002, 1.003, 1.003, 1.003, 1.002, 1);
+    --soft:linear(0, 0.024, 0.083, 0.163, 0.252, 0.342, 0.431, 0.513, 0.588, 0.655, 0.713, 0.764, 0.807, 0.844, 0.874, 0.899, 0.92, 0.937, 0.951, 0.962, 0.971, 0.978, 0.984, 0.988, 0.991, 0.994, 0.996, 0.998, 1);
+    --weighty:linear(0, 0.052, 0.175, 0.33, 0.492, 0.641, 0.768, 0.87, 0.946, 0.999, 1.032, 1.049, 1.055, 1.054, 1.048, 1.04, 1.031, 1.022, 1.015, 1.009, 1.004, 1.001, 0.999, 0.997, 0.997, 0.998, 1);
+    --exit:linear(0, 0.068, 0.201, 0.34, 0.466, 0.572, 0.659, 0.729, 0.786, 0.83, 0.866, 0.894, 0.916, 0.934, 0.947, 0.958, 0.967, 0.974, 0.979, 0.984, 0.987, 0.99, 0.992, 0.994, 0.996, 0.998, 1);
+    --bouncy:linear(0, 0.083, 0.281, 0.524, 0.758, 0.95, 1.084, 1.159, 1.184, 1.171, 1.137, 1.092, 1.049, 1.012, 0.987, 0.972, 0.966, 0.968, 0.974, 0.982, 0.99, 0.997, 1.002, 1.005, 1.006, 1.005, 1.003, 1);
   } }
-  button, header nav a, input, select, textarea, td { transition:background-color 180ms var(--pin-spring), color 180ms var(--pin-spring), border-color 180ms var(--pin-spring), transform 180ms var(--pin-spring); }
+  button, header nav button, input, select, textarea, td { transition:background-color 370ms var(--spring), color 370ms var(--spring), border-color 370ms var(--spring), transform 370ms var(--spring), box-shadow 370ms var(--spring); }
+  input:focus, select:focus, textarea:focus { border-color:var(--accent); outline:none; }
   tr:hover td { background:var(--bg); }
-  @keyframes pin-rise { from { opacity:0; transform:translateY(12px) scale(0.985); } }
+  .stat, td.num { font-variant-numeric:tabular-nums; }
+  header nav { position:relative; }
+  header nav button { position:relative; }
+  header nav .pill { position:absolute; left:0; top:0; bottom:0; width:0; border-radius:6px; background:var(--tint); pointer-events:none; }
+  .toasts { position:fixed; top:64px; right:16px; z-index:5; display:grid; gap:8px; max-width:min(380px, calc(100vw - 32px)); }
+  .toast { background:#fff; border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:8px; padding:10px 14px; box-shadow:0 8px 24px rgba(20,33,61,.12); }
+  .toast.bad { border-left-color:#b91c1c; }
+  @keyframes rise { from { opacity:0; transform:translateY(16px); filter:blur(10px); } }   /* a surface arriving: up out of a blur */
+  @keyframes pop { from { opacity:0; transform:scale(0.96) translateY(-4px); } }            /* something opening in place */
+  @keyframes chip { from { opacity:0; transform:scale(0.6); } }                             /* a small status landing */
+  @keyframes row { from { opacity:0; transform:translateY(8px); } }
+  @keyframes toast-in { from { opacity:0; transform:translateX(64px); } }
+  @keyframes leave { to { opacity:0; transform:scale(0.98) translateY(-2px); } }
+  @keyframes toast-out { to { opacity:0; transform:translateX(48px); } }
   @media (prefers-reduced-motion: no-preference) {
-    button.primary:active { transform:scale(0.97); }
-    .card { animation:pin-rise 410ms var(--pin-soft) backwards; }
-    .card:nth-child(2) { animation-delay:40ms; }
-    .card:nth-child(3) { animation-delay:80ms; }
-    .card:nth-child(n+4) { animation-delay:120ms; }
+    header nav .pill { transition:transform 370ms var(--spring), width 370ms var(--spring), opacity 200ms; }
+    button.primary:hover { box-shadow:0 4px 14px rgba(29,78,216,.28); }
+    button.primary:active { transform:scale(0.97); box-shadow:none; }
+    button.link:active { transform:scale(0.96); }
+    main > *, main > .grid > .card, .auth { animation:rise 410ms var(--soft) backwards; }
+    main > :nth-child(2), main > .grid > .card:nth-child(2) { animation-delay:50ms; }
+    main > :nth-child(3), main > .grid > .card:nth-child(3) { animation-delay:100ms; }
+    main > :nth-child(n+4), main > .grid > .card:nth-child(n+4) { animation-delay:150ms; }
+    .tag.hot, .soon { animation:chip 390ms var(--bouncy) backwards; animation-delay:220ms; }
+    .fresh tr { animation:row 410ms var(--soft) backwards; animation-delay:calc(min(var(--i, 0), 14) * 22ms + 120ms); }
+    .toast { animation:toast-in 660ms var(--weighty) backwards; }
+    .toast.out { animation:toast-out 240ms var(--exit) forwards; }
   }
+  @media print { *, *::before, *::after { animation:none !important; transition:none !important; } }
 </style>
 </head>
 <body>
@@ -60,11 +86,31 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<'
 async function api(path, opts = {}) {
   const res = await fetch('/api/' + path, { headers: { 'content-type': 'application/json' }, ...opts, body: opts.body && JSON.stringify(opts.body) });
   const data = await res.json().catch(() => ({}));
-  if (res.status === 401 && path !== 'login') { me = null; render(); }
+  // only a session that ended mid-use goes back to sign-in; doing it while already signed out loops forever
+  if (res.status === 401 && me) { me = null; render(); }
   if (!res.ok) throw new Error(data.error || res.statusText);
   return data;
 }
 let me = null, view = 'bids';
+const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+// Messages slide in from the right and leave on their own; errors stay longer.
+function toast(msg, bad = false) {
+  const box = $('.toasts') ?? document.body.appendChild(Object.assign(document.createElement('div'), { className: 'toasts' }));
+  const t = Object.assign(document.createElement('div'), { className: 'toast' + (bad ? ' bad' : ''), textContent: msg });
+  t.setAttribute('role', bad ? 'alert' : 'status'); box.append(t);
+  setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 260); }, bad ? 8000 : 5000);
+}
+// Rows arrive one after another the first time a list shows; reloads from typing or filters don't replay it.
+const stagger = (box, first) => { box.classList.toggle('fresh', first); box.querySelectorAll('tr').forEach((tr, i) => tr.style.setProperty('--i', i)); };
+// The highlight behind the active tab slides from the tab you left to the one you opened.
+let pillAt = null;
+function movePill() {
+  const pill = $('header nav .pill'), on = $('header nav button.on');
+  if (!on) { pill.style.opacity = 0; pillAt = null; return; }
+  const set = (p) => { pill.style.transform = `translateX(${p.x}px)`; pill.style.width = p.w + 'px'; };
+  if (pillAt) { pill.style.transition = 'none'; set(pillAt); pill.offsetWidth; pill.style.transition = ''; }
+  set(pillAt = { x: on.offsetLeft, w: on.offsetWidth });
+}
 const app = $('#app');
 
 function authForm(setup) {
@@ -86,10 +132,11 @@ function authForm(setup) {
 
 function shell(inner) {
   const tabs = [['bids', 'Bids'], ['settings', 'Settings'], ...(me.role === 'admin' ? [['users', 'Users']] : [])];
-  app.innerHTML = `<header><h1>VTech Auction Tracker</h1><nav>${tabs.map(([k, l]) => `<button data-v="${k}" class="${view === k ? 'on' : ''}">${l}</button>`).join('')}</nav>
+  app.innerHTML = `<header><h1>VTech Auction Tracker</h1><nav><i class="pill"></i>${tabs.map(([k, l]) => `<button data-v="${k}" class="${view === k ? 'on' : ''}">${l}</button>`).join('')}</nav>
     <span class="who">${esc(me.name)} · <button class="link" id="out">Sign out</button></span></header><main>${inner}</main>`;
   app.querySelectorAll('nav button').forEach((b) => (b.onclick = () => { view = b.dataset.v; render(); }));
-  $('#out').onclick = async () => { await api('logout', { method: 'POST' }); me = null; render(); };
+  $('#out').onclick = async () => { await api('logout', { method: 'POST' }); me = null; pillAt = null; render(); };
+  movePill();
 }
 
 const daysLeft = (end) => end ? Math.ceil((new Date(end) - Date.now()) / 864e5) : null;
@@ -98,6 +145,7 @@ async function bidsView() {
   shell(`<div class="bar"><input id="q" placeholder="Search items, buyer, bid no." style="flex:1;min-width:220px">
     <select id="interest"><option value="">All</option><option>new</option><option>interested</option><option>submitted</option><option>ignored</option></select>
     <label class="muted"><input type="checkbox" id="open" checked> Open only</label></div><div class="card" id="list">Loading…</div>`);
+  let first = true;
   const load = async () => {
     const qs = new URLSearchParams({ q: $('#q').value, interest: $('#interest').value, open: $('#open').checked ? '1' : '0' });
     const bids = await api('bids?' + qs);
@@ -105,14 +153,15 @@ async function bidsView() {
       `<table><tr><th>Bid</th><th>Items</th><th>Buyer</th><th>Closes</th><th>Status</th></tr>${bids.map((b) => {
         const d = daysLeft(b.end_at);
         return `<tr><td class="num"><a href="${esc(b.url)}" target="_blank" rel="noopener">${esc(b.bid_number)}</a><br>
-          <span class="tag">${esc(b.bid_kind || 'bid')}</span> ${b.bid_to_ra ? '<span class="tag">Bid→RA</span>' : ''} ${b.is_high_value ? '<span class="tag">≥ ₹2 Cr</span>' : ''}</td>
+          <span class="tag">${esc(b.bid_kind || 'bid')}</span> ${b.bid_to_ra ? '<span class="tag">Bid→RA</span>' : ''} ${b.is_high_value ? '<span class="tag hot">≥ ₹2 Cr</span>' : ''}</td>
           <td>${esc(b.items)}<br><span class="muted">Qty ${esc(b.quantity ?? '—')} · keyword “${esc(b.matched_keyword)}”</span></td>
           <td>${esc(b.ministry)}<br><span class="muted">${esc(b.department)}</span></td>
           <td class="num ${d !== null && d <= 3 ? 'soon' : ''}">${esc((b.end_at || '').slice(0, 16).replace('T', ' '))}<br><span class="muted">${d === null ? '' : d < 0 ? 'closed' : d + ' day(s) left'}</span></td>
           <td><select data-bid="${esc(b.bid_number)}">${['new', 'interested', 'submitted', 'ignored'].map((s) => `<option ${s === b.interest ? 'selected' : ''}>${s}</option>`).join('')}</select></td></tr>`;
       }).join('')}</table>`;
+    stagger($('#list'), first); first = false;
     $('#list').querySelectorAll('select[data-bid]').forEach((s) => (s.onchange = () =>
-      api('bids/' + encodeURIComponent(s.dataset.bid), { method: 'PATCH', body: { interest: s.value } })));
+      api('bids/' + encodeURIComponent(s.dataset.bid), { method: 'PATCH', body: { interest: s.value } }).catch((e) => toast(e.message, true))));
   };
   let t; $('#q').oninput = () => { clearTimeout(t); t = setTimeout(load, 250); };
   $('#interest').onchange = load; $('#open').onchange = load;
@@ -133,8 +182,8 @@ async function settingsView() {
       ${runs.map((r) => `<tr><td>${esc(r.at)}</td><td>${r.fetched}</td><td>${r.new_bids}</td><td>${r.emailed}</td><td class="err">${esc(r.error)}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">No runs yet</td></tr>'}</table></div></div>`);
   if (!admin) return;
   const lines = (id) => $(id).value.split('\n').map((x) => x.trim()).filter(Boolean);
-  $('#save').onclick = async () => { try { await api('settings', { method: 'PUT', body: { keywords: lines('#kw'), recipients: lines('#rc') } }); $('#err').textContent = 'Saved'; } catch (e) { $('#err').textContent = e.message; } };
-  $('#run').onclick = async () => { $('#err').textContent = 'Running… (can take a minute)'; try { const r = await api('run-now', { method: 'POST' }); $('#err').textContent = r.error || `Fetched ${r.fetched}, new ${r.fresh}, emailed ${r.emailed}`; } catch (e) { $('#err').textContent = e.message; } };
+  $('#save').onclick = async () => { try { await api('settings', { method: 'PUT', body: { keywords: lines('#kw'), recipients: lines('#rc') } }); $('#err').textContent = ''; toast('Settings saved'); } catch (e) { $('#err').textContent = e.message; } };
+  $('#run').onclick = async () => { $('#err').textContent = 'Running… (can take a minute)'; try { const r = await api('run-now', { method: 'POST' }); $('#err').textContent = ''; r.error ? toast(r.error, true) : toast(`Fetched ${r.fetched}, new ${r.fresh}, emailed ${r.emailed}`); settingsView(); } catch (e) { $('#err').textContent = e.message; } };
 }
 
 async function usersView() {
